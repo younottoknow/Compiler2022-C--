@@ -1,0 +1,11 @@
+*.s
+!main.S
+*.out
+pattern/others
+test/
+parser
+parser.output
+lex.yy.c
+*.o
+parser.tab*
+Dockerfile
