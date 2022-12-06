@@ -400,9 +400,42 @@ cfactor:	CONST
                 {
                     $$ = makeConstNode($1);
                 }
+            | OP_PLUS CONST
+                {
+                    $$ = makeExprNode(UNARY_OPERATION, UNARY_OP_POSITIVE);
+                    AST_NODE* constNode = makeConstNode($2);
+                    makeChild($$, constNode);
+                }
+            | OP_MINUS CONST
+                {
+                    $$ = makeExprNode(UNARY_OPERATION, UNARY_OP_NEGATIVE);
+                    AST_NODE* constNode = makeConstNode($2);
+                    makeChild($$, constNode);
+                }
+            | OP_NOT CONST
+                {
+                    $$ = makeExprNode(UNARY_OPERATION, UNARY_OP_LOGICAL_NEGATION);
+                    AST_NODE* constNode = makeConstNode($2);
+                    makeChild($$, constNode);
+                }
             | MK_LPAREN cexpr MK_RPAREN
                 {
                     $$ = $2;
+                }
+            | OP_PLUS MK_LPAREN cexpr MK_RPAREN
+                {
+                    $$ = makeExprNode(UNARY_OPERATION, UNARY_OP_POSITIVE);
+                    makeChild($$, $3);
+                }
+            | OP_MINUS MK_LPAREN cexpr MK_RPAREN
+                {
+                    $$ = makeExprNode(UNARY_OPERATION, UNARY_OP_NEGATIVE);
+                    makeChild($$, $3);
+                }
+            | OP_NOT MK_LPAREN cexpr MK_RPAREN
+                {
+                    $$ = makeExprNode(UNARY_OPERATION, UNARY_OP_LOGICAL_NEGATION);
+                    makeChild($$, $3);
                 }
             ;
 
@@ -716,6 +749,11 @@ factor		: MK_LPAREN relop_expr MK_RPAREN
             | var_ref
                 {
                     $$ = $1;
+                }
+            | OP_PLUS var_ref
+                {
+                    $$ = makeExprNode(UNARY_OPERATION, UNARY_OP_POSITIVE);
+                    makeChild($$, $2);
                 }
             | OP_MINUS var_ref
                 {
