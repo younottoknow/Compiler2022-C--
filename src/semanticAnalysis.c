@@ -53,7 +53,7 @@ typedef enum ErrorMsgKind
     NOT_ARRAY,
     IS_TYPE_NOT_VARIABLE,
     IS_FUNCTION_NOT_VARIABLE,
-    STRING_OPERATION,
+    UNSUPPORTED_OPERATION,
     ARRAY_SIZE_NOT_INT,
     ARRAY_SIZE_NEGATIVE,
     ARRAY_SUBSCRIPT_NOT_INT,
@@ -160,8 +160,8 @@ void printErrorMsg(AST_NODE* node, ErrorMsgKind errorMsgKind)
         printf("ID \'%s\' is a function, not a variable's name.\n",
             node->semantic_value.identifierSemanticValue.identifierName);
         break;
-    case STRING_OPERATION:
-        printf("String operation is unsupported.\n");
+    case UNSUPPORTED_OPERATION:
+        printf("Operation is unsupported on type %d.\n", node->dataType);
         break;
     case ARRAY_SIZE_NOT_INT:
         printf("Size of array \'%s\' has non-integer type.\n",
@@ -191,7 +191,12 @@ void semanticAnalysis(AST_NODE *root)
 
 DATA_TYPE getBiggerType(DATA_TYPE dataType1, DATA_TYPE dataType2)
 {
-    if(dataType1 == FLOAT_TYPE || dataType2 == FLOAT_TYPE)
+    if((dataType1 != FLOAT_TYPE && dataType1 != INT_TYPE)
+        || (dataType2 != FLOAT_TYPE && dataType2 != INT_TYPE))
+    {
+        printf("Only int type and float type can be pass to getBiggerType\n");
+    }
+    else if(dataType1 == FLOAT_TYPE || dataType2 == FLOAT_TYPE)
     {
         return FLOAT_TYPE;
     }
@@ -278,7 +283,6 @@ void processTypeNode(AST_NODE* idNodeAsType)
             idNodeAsType->dataType = symbolTableEntry->attribute->attr.typeDescriptor->properties.arrayProperties.elementType;
             break;
         }
-        //*/
     }
 }
 
@@ -453,7 +457,7 @@ void checkAssignmentStmt(AST_NODE* assignmentNode)
     }
     else if(rightOp->dataType == CONST_STRING_TYPE)
     {
-        printErrorMsg(rightOp, STRING_OPERATION);
+        printErrorMsg(rightOp, UNSUPPORTED_OPERATION);
         assignmentNode->dataType = ERROR_TYPE;
     }
     else
@@ -658,9 +662,13 @@ void getExprOrConstValue(AST_NODE* exprOrConstNode, int* iValue, float* fValue)
                 *iValue = exprOrConstNode->semantic_value.const1->const_u.intval;
             }
         }
-        else
+        else if (exprOrConstNode->dataType == FLOAT_TYPE)
         {
             *fValue = exprOrConstNode->semantic_value.const1->const_u.fval;
+        }
+        else
+        {
+            printf("Only can get const value from int or float\n");
         }
     }
     else
@@ -676,9 +684,13 @@ void getExprOrConstValue(AST_NODE* exprOrConstNode, int* iValue, float* fValue)
                 *iValue = exprOrConstNode->semantic_value.exprSemanticValue.constEvalValue.iValue;
             }
         }
-        else
+        else if (exprOrConstNode->dataType == FLOAT_TYPE)
         {
             *fValue = exprOrConstNode->semantic_value.exprSemanticValue.constEvalValue.fValue;
+        }
+        else
+        {
+            printf("Only can get const value from int or float\n");
         }
     }
 }
@@ -689,7 +701,8 @@ void evaluateExprValue(AST_NODE* exprNode)
     {
         AST_NODE* leftOp = exprNode->child;
         AST_NODE* rightOp = leftOp->rightSibling;
-        if(leftOp->dataType == INT_TYPE && rightOp->dataType == INT_TYPE)
+        DATA_TYPE dtype = getBiggerType(leftOp->dataType, rightOp->dataType);
+        if(dtype == INT_TYPE)
         {
             int leftValue = 0;
             int rightValue = 0;
@@ -741,7 +754,7 @@ void evaluateExprValue(AST_NODE* exprNode)
 
             return;
         }
-        else
+        else if(dtype == FLOAT_TYPE)
         {
             float leftValue = 0;
             float rightValue = 0;
@@ -791,6 +804,10 @@ void evaluateExprValue(AST_NODE* exprNode)
                 break;
             }
         }
+        else
+        {
+            printf("Only int and float can be evaluated");
+        }
     }
     else
     {
@@ -816,7 +833,7 @@ void evaluateExprValue(AST_NODE* exprNode)
                 break;
             }
         }
-        else
+        else if(operand->dataType == FLOAT_TYPE)
         {
             float operandValue = 0;
             getExprOrConstValue(operand, NULL, &operandValue);
@@ -837,6 +854,10 @@ void evaluateExprValue(AST_NODE* exprNode)
                 break;
             }
         }
+        else
+        {
+            printf("Only int and float can be evaluated");
+        }
     }
 }
 
@@ -850,36 +871,28 @@ void processExprNode(AST_NODE* exprNode)
         processExprRelatedNode(leftOp);
         processExprRelatedNode(rightOp);
         //special case
-        if(leftOp->dataType == INT_PTR_TYPE || leftOp->dataType == FLOAT_PTR_TYPE)
+        if(leftOp->dataType != INT_TYPE && leftOp->dataType != FLOAT_TYPE)
         {
-            printErrorMsg(leftOp, INCOMPATIBLE_ARRAY_DIMENSION);
+            printErrorMsg(leftOp, UNSUPPORTED_OPERATION);
             exprNode->dataType = ERROR_TYPE;
         }
-        if(rightOp->dataType == INT_PTR_TYPE || rightOp->dataType == FLOAT_PTR_TYPE)
+        else if(rightOp->dataType != INT_TYPE && rightOp->dataType != FLOAT_TYPE)
         {
-            printErrorMsg(leftOp, INCOMPATIBLE_ARRAY_DIMENSION);
+            printErrorMsg(rightOp, UNSUPPORTED_OPERATION);
             exprNode->dataType = ERROR_TYPE;
         }
-        if(leftOp->dataType == CONST_STRING_TYPE || rightOp->dataType == CONST_STRING_TYPE)
-        {
-            printErrorMsg(exprNode, STRING_OPERATION);
-            exprNode->dataType = ERROR_TYPE;
-        }
-        //
-        if(leftOp->dataType == ERROR_TYPE || rightOp->dataType == ERROR_TYPE)
+        else if(leftOp->dataType == ERROR_TYPE || rightOp->dataType == ERROR_TYPE)
         {
             exprNode->dataType = ERROR_TYPE;
         }
-
-        if(exprNode->dataType != ERROR_TYPE)
+        else
         {
             exprNode->dataType = getBiggerType(leftOp->dataType, rightOp->dataType);
         }
 
         if((exprNode->dataType != ERROR_TYPE) &&
            (leftOp->nodeType == CONST_VALUE_NODE || (leftOp->nodeType == EXPR_NODE && leftOp->semantic_value.exprSemanticValue.isConstEval)) &&
-           (rightOp->nodeType == CONST_VALUE_NODE || (rightOp->nodeType == EXPR_NODE && rightOp->semantic_value.exprSemanticValue.isConstEval))
-          )
+           (rightOp->nodeType == CONST_VALUE_NODE || (rightOp->nodeType == EXPR_NODE && rightOp->semantic_value.exprSemanticValue.isConstEval)))
         {
             evaluateExprValue(exprNode);
             exprNode->semantic_value.exprSemanticValue.isConstEval = 1;
@@ -890,18 +903,13 @@ void processExprNode(AST_NODE* exprNode)
         AST_NODE* operand = exprNode->child;
         processExprRelatedNode(operand);
         //special case
-        if(operand->dataType == INT_PTR_TYPE || operand->dataType == FLOAT_PTR_TYPE)
+        if(operand->dataType == ERROR_TYPE)
         {
-            printErrorMsg(operand, INCOMPATIBLE_ARRAY_DIMENSION);
             exprNode->dataType = ERROR_TYPE;
         }
-        else if(operand->dataType == CONST_STRING_TYPE)
+        else if(operand->dataType != INT_TYPE && operand->dataType != FLOAT_TYPE)
         {
-            printErrorMsg(exprNode, STRING_OPERATION);
-            exprNode->dataType = ERROR_TYPE;
-        }
-        else if(operand->dataType == ERROR_TYPE)
-        {
+            printErrorMsg(operand, UNSUPPORTED_OPERATION);
             exprNode->dataType = ERROR_TYPE;
         }
         else
@@ -909,10 +917,8 @@ void processExprNode(AST_NODE* exprNode)
             exprNode->dataType = operand->dataType;
         }
 
-
         if((exprNode->dataType != ERROR_TYPE) &&
-           (operand->nodeType == CONST_VALUE_NODE || (operand->nodeType == EXPR_NODE && operand->semantic_value.exprSemanticValue.isConstEval))
-          )
+           (operand->nodeType == CONST_VALUE_NODE || (operand->nodeType == EXPR_NODE && operand->semantic_value.exprSemanticValue.isConstEval)))
         {
             evaluateExprValue(exprNode);
             exprNode->semantic_value.exprSemanticValue.isConstEval = 1;
@@ -973,7 +979,7 @@ void processVariableLValue(AST_NODE* idNode)
             {
                 idNode->dataType = ERROR_TYPE;
             }
-            else if(traverseDimList->dataType == FLOAT_TYPE)
+            else if(traverseDimList->dataType != INT_TYPE)
             {
                 printErrorMsg(idNode, ARRAY_SUBSCRIPT_NOT_INT);
                 idNode->dataType = ERROR_TYPE;
@@ -1058,7 +1064,7 @@ void processVariableRValue(AST_NODE* idNode)
                 {
                     idNode->dataType = ERROR_TYPE;
                 }
-                else if(traverseDimList->dataType == FLOAT_TYPE)
+                else if(traverseDimList->dataType != INT_TYPE)
                 {
                     printErrorMsg(idNode, ARRAY_SUBSCRIPT_NOT_INT);
                     idNode->dataType = ERROR_TYPE;
@@ -1092,17 +1098,20 @@ void processVariableRValue(AST_NODE* idNode)
 
 void processConstValueNode(AST_NODE* constValueNode)
 {
+    CON_Type* const_p = constValueNode->semantic_value.const1;
     switch(constValueNode->semantic_value.const1->const_type)
     {
     case INTEGERC:
         constValueNode->dataType = INT_TYPE;
         constValueNode->semantic_value.exprSemanticValue.constEvalValue.iValue =
             constValueNode->semantic_value.const1->const_u.intval;
+        free(const_p);
         break;
     case FLOATC:
         constValueNode->dataType = FLOAT_TYPE;
         constValueNode->semantic_value.exprSemanticValue.constEvalValue.fValue =
             constValueNode->semantic_value.const1->const_u.fval;
+        free(const_p);
         break;
     case STRINGC:
         constValueNode->dataType = CONST_STRING_TYPE;
@@ -1302,7 +1311,7 @@ void processDeclDimList(AST_NODE* idNode, TypeDescriptor* typeDescriptor, int ig
         {
             idNode->dataType = ERROR_TYPE;
         }
-        else if(traverseDim->dataType == FLOAT_TYPE)
+        else if(traverseDim->dataType != INT_TYPE)
         {
             printErrorMsg(traverseDim->parent, ARRAY_SIZE_NOT_INT);
             idNode->dataType = ERROR_TYPE;
