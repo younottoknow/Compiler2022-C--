@@ -597,8 +597,6 @@ void checkFunctionCall(AST_NODE* functionCallNode)
 void checkParameterPassing(Parameter* formalParameter, AST_NODE* actualParameter)
 {
     int actualParameterIsPtr = 0;
-    DATA_TYPE actualParameterDataType = NONE_TYPE;
-    actualParameterDataType = actualParameter->dataType;
     if(actualParameter->dataType == INT_PTR_TYPE || actualParameter->dataType == FLOAT_PTR_TYPE)
     {
         actualParameterIsPtr = 1;
@@ -655,16 +653,16 @@ void getExprOrConstValue(AST_NODE* exprOrConstNode, int* iValue, float* fValue)
         {
             if(fValue)
             {
-                *fValue = exprOrConstNode->semantic_value.const1->const_u.intval;
+                *fValue = exprOrConstNode->semantic_value.exprSemanticValue.constEvalValue.iValue;
             }
             else
             {
-                *iValue = exprOrConstNode->semantic_value.const1->const_u.intval;
+                *iValue = exprOrConstNode->semantic_value.exprSemanticValue.constEvalValue.iValue;
             }
         }
         else if (exprOrConstNode->dataType == FLOAT_TYPE)
         {
-            *fValue = exprOrConstNode->semantic_value.const1->const_u.fval;
+            *fValue = exprOrConstNode->semantic_value.exprSemanticValue.constEvalValue.fValue;
         }
         else
         {
