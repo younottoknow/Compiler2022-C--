@@ -602,7 +602,15 @@ void checkParameterPassing(Parameter* formalParameter, AST_NODE* actualParameter
         actualParameterIsPtr = 1;
     }
 
-    if(formalParameter->type->kind == SCALAR_TYPE_DESCRIPTOR && actualParameterIsPtr)
+    if(actualParameter->dataType != INT_TYPE
+       && actualParameter->dataType != FLOAT_TYPE
+       && actualParameter->dataType != INT_PTR_TYPE
+       && actualParameter->dataType != FLOAT_PTR_TYPE)
+    {
+        printErrorMsg(actualParameter, PARAMETER_TYPE_UNMATCH);
+        actualParameter->dataType = ERROR_TYPE;
+    }
+    else if(formalParameter->type->kind == SCALAR_TYPE_DESCRIPTOR && actualParameterIsPtr)
     {
         printErrorMsgSpecial(actualParameter, formalParameter->parameterName, PASS_ARRAY_TO_SCALAR);
         actualParameter->dataType = ERROR_TYPE;
@@ -612,7 +620,9 @@ void checkParameterPassing(Parameter* formalParameter, AST_NODE* actualParameter
         printErrorMsgSpecial(actualParameter, formalParameter->parameterName, PASS_SCALAR_TO_ARRAY);
         actualParameter->dataType = ERROR_TYPE;
     }
-    else if(actualParameter->dataType == CONST_STRING_TYPE)
+    else if(formalParameter->type->kind == ARRAY_TYPE_DESCRIPTOR
+            && ((actualParameter->dataType == INT_PTR_TYPE && formalParameter->type->properties.arrayProperties.elementType == FLOAT_TYPE)
+            || (actualParameter->dataType == FLOAT_PTR_TYPE && formalParameter->type->properties.arrayProperties.elementType == INT_TYPE)))
     {
         printErrorMsg(actualParameter, PARAMETER_TYPE_UNMATCH);
         actualParameter->dataType = ERROR_TYPE;
