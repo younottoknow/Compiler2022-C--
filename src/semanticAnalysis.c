@@ -705,6 +705,7 @@ void getExprOrConstValue(AST_NODE* exprOrConstNode, int* iValue, float* fValue)
 
 void evaluateExprValue(AST_NODE* exprNode)
 {
+    exprNode->semantic_value.exprSemanticValue.isConstEval = 1;
     if(exprNode->semantic_value.exprSemanticValue.kind == BINARY_OPERATION)
     {
         AST_NODE* leftOp = exprNode->child;
@@ -729,7 +730,8 @@ void evaluateExprValue(AST_NODE* exprNode)
                 exprNode->semantic_value.exprSemanticValue.constEvalValue.iValue = leftValue * rightValue;
                 break;
             case BINARY_OP_DIV:
-                exprNode->semantic_value.exprSemanticValue.constEvalValue.iValue = leftValue / rightValue;
+                if(rightValue) exprNode->semantic_value.exprSemanticValue.constEvalValue.iValue = leftValue / rightValue;
+                else exprNode->semantic_value.exprSemanticValue.isConstEval = 0;
                 break;
             case BINARY_OP_EQ:
                 exprNode->semantic_value.exprSemanticValue.constEvalValue.iValue = leftValue == rightValue;
@@ -903,7 +905,6 @@ void processExprNode(AST_NODE* exprNode)
            (rightOp->nodeType == CONST_VALUE_NODE || (rightOp->nodeType == EXPR_NODE && rightOp->semantic_value.exprSemanticValue.isConstEval)))
         {
             evaluateExprValue(exprNode);
-            exprNode->semantic_value.exprSemanticValue.isConstEval = 1;
         }
     }
     else
@@ -929,7 +930,6 @@ void processExprNode(AST_NODE* exprNode)
            (operand->nodeType == CONST_VALUE_NODE || (operand->nodeType == EXPR_NODE && operand->semantic_value.exprSemanticValue.isConstEval)))
         {
             evaluateExprValue(exprNode);
-            exprNode->semantic_value.exprSemanticValue.isConstEval = 1;
         }
 
     }
