@@ -11,7 +11,7 @@ char *AST_TYPE_string[] = {"PROGRAM", "GLOBAL_DECL_LIST", "GLOBAL_DECL", "DECL_L
 
 int printGVNode(FILE *fp, AST_NODE* node, int count);
 
-char *printLabelString(FILE *fp, AST_NODE *astNode)
+void printLabelString(FILE *fp, AST_NODE *astNode)
 {
     char *binaryOpString[] = {
         "+",
@@ -195,4 +195,3 @@ int printGVNode(FILE *fp, AST_NODE* node, int count)
 
     return countAfterCheckSibling;
 }
-

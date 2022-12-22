@@ -111,6 +111,7 @@ static inline AST_NODE* makeConstNode(CON_Type* C)
 {
     AST_NODE* constNode = Allocate(CONST_VALUE_NODE);
     constNode->semantic_value.const1 = C;
+    return constNode;
 }
 %}
 

@@ -343,26 +343,23 @@ void declareIdList(AST_NODE* declarationNode, SymbolAttributeKind isVariableOrTy
                 {
                     int typeArrayDimension = typeNode->semantic_value.identifierSemanticValue.symbolTableEntry->attribute->attr.typeDescriptor->properties.arrayProperties.dimension;
                     int idArrayDimension = attribute->attr.typeDescriptor->properties.arrayProperties.dimension;
-                    if((typeArrayDimension + idArrayDimension) > MAX_ARRAY_DIMENSION)
-                    {
-                        printErrorMsg(traverseIDList, EXCESSIVE_ARRAY_DIM_DECLARATION);
-                        free(attribute->attr.typeDescriptor);
-                        traverseIDList->dataType = ERROR_TYPE;
-                        declarationNode->dataType = ERROR_TYPE;
+                    int *realsizeInEachDimension = malloc(sizeof(int) * (typeArrayDimension + idArrayDimension));
+                    for (int i = 0; i < idArrayDimension; i++) {
+                        realsizeInEachDimension[i] = attribute->attr.typeDescriptor->properties.arrayProperties.sizeInEachDimension[i];
                     }
-                    else
+                    free(attribute->attr.typeDescriptor->properties.arrayProperties.sizeInEachDimension);
+                    attribute->attr.typeDescriptor->properties.arrayProperties.elementType =
+                        typeNode->semantic_value.identifierSemanticValue.symbolTableEntry->attribute->attr.typeDescriptor->properties.arrayProperties.elementType;
+                    attribute->attr.typeDescriptor->properties.arrayProperties.dimension =
+                        typeArrayDimension + idArrayDimension;
+                    attribute->attr.typeDescriptor->properties.arrayProperties.sizeInEachDimension =
+                        realsizeInEachDimension;
+                    int indexType = 0;
+                    int indexId = 0;
+                    for(indexType = 0, indexId = idArrayDimension; indexId < idArrayDimension + typeArrayDimension; ++indexType, ++indexId)
                     {
-                        attribute->attr.typeDescriptor->properties.arrayProperties.elementType =
-                            typeNode->semantic_value.identifierSemanticValue.symbolTableEntry->attribute->attr.typeDescriptor->properties.arrayProperties.elementType;
-                        attribute->attr.typeDescriptor->properties.arrayProperties.dimension =
-                            typeArrayDimension + idArrayDimension;
-                        int indexType = 0;
-                        int indexId = 0;
-                        for(indexType = 0, indexId = idArrayDimension; indexId < idArrayDimension + typeArrayDimension; ++indexType, ++indexId)
-                        {
-                            attribute->attr.typeDescriptor->properties.arrayProperties.sizeInEachDimension[indexId] =
-                                typeNode->semantic_value.identifierSemanticValue.symbolTableEntry->attribute->attr.typeDescriptor->properties.arrayProperties.sizeInEachDimension[indexType];
-                        }
+                        attribute->attr.typeDescriptor->properties.arrayProperties.sizeInEachDimension[indexId] =
+                            typeNode->semantic_value.identifierSemanticValue.symbolTableEntry->attribute->attr.typeDescriptor->properties.arrayProperties.sizeInEachDimension[indexType];
                     }
                 }
                 break;
@@ -1299,6 +1296,17 @@ void processDeclDimList(AST_NODE* idNode, TypeDescriptor* typeDescriptor, int ig
     typeDescriptor->kind = ARRAY_TYPE_DESCRIPTOR;
     AST_NODE* traverseDim = variableDeclDimList;
     int dimension = 0;
+    while(traverseDim)
+    {
+        ++dimension;
+        traverseDim = traverseDim->rightSibling;
+    }
+
+    typeDescriptor->properties.arrayProperties.dimension = dimension;
+    typeDescriptor->properties.arrayProperties.sizeInEachDimension = malloc(sizeof(int) * dimension);
+
+    traverseDim = variableDeclDimList;
+    dimension = 0;
     if(ignoreFirstDimSize && traverseDim->nodeType == NUL_NODE)
     {
         typeDescriptor->properties.arrayProperties.sizeInEachDimension[dimension] = 0;
@@ -1307,25 +1315,17 @@ void processDeclDimList(AST_NODE* idNode, TypeDescriptor* typeDescriptor, int ig
     }
     while(traverseDim)
     {
-        if(dimension >= MAX_ARRAY_DIMENSION)
-        {
-            printErrorMsg(variableDeclDimList->parent, EXCESSIVE_ARRAY_DIM_DECLARATION);
-            idNode->dataType = ERROR_TYPE;
-            break;
-        }
-
         processExprRelatedNode(traverseDim);
         if(traverseDim->dataType == ERROR_TYPE)
         {
             idNode->dataType = ERROR_TYPE;
         }
-        else if(traverseDim->dataType != INT_TYPE)
+        else if(traverseDim->dataType != INT_TYPE || !traverseDim->semantic_value.exprSemanticValue.isConstEval)
         {
             printErrorMsg(traverseDim->parent, ARRAY_SIZE_NOT_INT);
             idNode->dataType = ERROR_TYPE;
         }
-        else if(traverseDim->semantic_value.exprSemanticValue.isConstEval &&
-            traverseDim->semantic_value.exprSemanticValue.constEvalValue.iValue < 0)
+        else if(traverseDim->semantic_value.exprSemanticValue.constEvalValue.iValue < 0)
         {
             printErrorMsg(traverseDim->parent, ARRAY_SIZE_NEGATIVE);
             idNode->dataType = ERROR_TYPE;
@@ -1339,8 +1339,6 @@ void processDeclDimList(AST_NODE* idNode, TypeDescriptor* typeDescriptor, int ig
         ++dimension;
         traverseDim = traverseDim->rightSibling;
     }
-
-    typeDescriptor->properties.arrayProperties.dimension = dimension;
 }
 
 

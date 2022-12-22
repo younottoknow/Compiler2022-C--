@@ -29,7 +29,7 @@ typedef enum TypeDescriptorKind
 typedef struct ArrayProperties
 {
     int dimension;
-    int sizeInEachDimension[MAX_ARRAY_DIMENSION];
+    int *sizeInEachDimension;
     //point to a TypeDescriptor in the symbol table;
     DATA_TYPE elementType;
 } ArrayProperties;
