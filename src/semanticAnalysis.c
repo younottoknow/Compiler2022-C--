@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
 #include "header.h"
 #include "symbolTable.h"
 int g_anyErrorOccur = 0;
@@ -58,7 +59,8 @@ typedef enum ErrorMsgKind
     ARRAY_SIZE_NEGATIVE,
     ARRAY_SUBSCRIPT_NOT_INT,
     PASS_ARRAY_TO_SCALAR,
-    PASS_SCALAR_TO_ARRAY
+    PASS_SCALAR_TO_ARRAY,
+    INVALID_TYPE_CONVERSION
 } ErrorMsgKind;
 
 void printErrorMsgSpecial(AST_NODE* node1, char* name2, ErrorMsgKind errorMsgKind)
@@ -174,6 +176,9 @@ void printErrorMsg(AST_NODE* node, ErrorMsgKind errorMsgKind)
     case ARRAY_SUBSCRIPT_NOT_INT:
         printf("Array subscript is not an integer.\n");
         break;
+    case INVALID_TYPE_CONVERSION:
+        printf("Invalid type conversion.\n");
+        break;
     default:
         printf("Unhandled case in void printErrorMsg(AST_NODE* node, ERROR_MSG_KIND* errorMsgKind)\n");
         break;
@@ -194,7 +199,10 @@ DATA_TYPE getBiggerType(DATA_TYPE dataType1, DATA_TYPE dataType2)
     if((dataType1 != FLOAT_TYPE && dataType1 != INT_TYPE)
         || (dataType2 != FLOAT_TYPE && dataType2 != INT_TYPE))
     {
-        printf("Only int type and float type can be pass to getBiggerType\n");
+        AST_NODE *tmp = Allocate(NUL_NODE);
+        tmp->linenumber = -1;
+        printErrorMsg(tmp, INVALID_TYPE_CONVERSION);
+        return ERROR_TYPE;
     }
     else if(dataType1 == FLOAT_TYPE || dataType2 == FLOAT_TYPE)
     {
@@ -205,7 +213,6 @@ DATA_TYPE getBiggerType(DATA_TYPE dataType1, DATA_TYPE dataType2)
         return INT_TYPE;
     }
 }
-
 
 void processProgramNode(AST_NODE *programNode)
 {
@@ -273,7 +280,6 @@ void processTypeNode(AST_NODE* idNodeAsType)
     else
     {
         idNodeAsType->semantic_value.identifierSemanticValue.symbolTableEntry = symbolTableEntry;
-
         switch(symbolTableEntry->attribute->attr.typeDescriptor->kind)
         {
         case SCALAR_TYPE_DESCRIPTOR:
@@ -307,6 +313,7 @@ void declareIdList(AST_NODE* declarationNode, SymbolAttributeKind isVariableOrTy
             printErrorMsg(traverseIDList, SYMBOL_REDECLARE);
             traverseIDList->dataType = ERROR_TYPE;
             declarationNode->dataType = ERROR_TYPE;
+            break;
         }
         else
         {
@@ -369,10 +376,54 @@ void declareIdList(AST_NODE* declarationNode, SymbolAttributeKind isVariableOrTy
                     printErrorMsg(traverseIDList, TRY_TO_INIT_ARRAY);
                     traverseIDList->dataType = ERROR_TYPE;
                     declarationNode->dataType = ERROR_TYPE;
+                    break;
                 }
                 else
                 {
                     attribute->attr.typeDescriptor = typeNode->semantic_value.identifierSemanticValue.symbolTableEntry->attribute->attr.typeDescriptor;
+
+                    processExprRelatedNode(traverseIDList->child);
+                    if(getBiggerType(attribute->attr.typeDescriptor->properties.dataType, traverseIDList->child->dataType) == ERROR_TYPE)
+                    {
+                        printErrorMsg(traverseIDList, INVALID_TYPE_CONVERSION);
+                        traverseIDList->dataType = ERROR_TYPE;
+                        declarationNode->dataType = ERROR_TYPE;
+                        break;
+                    }
+                    else if(attribute->attr.typeDescriptor->properties.dataType != traverseIDList->child->dataType)
+                    {
+                        AST_NODE *exprNode = traverseIDList->child;
+                        AST_NODE *typeConvertNode = Allocate(EXPR_NODE);
+                        if(exprNode->nodeType == CONST_VALUE_NODE || (exprNode->nodeType == EXPR_NODE && exprNode->semantic_value.exprSemanticValue.isConstEval))
+                        {
+                            typeConvertNode->semantic_value.exprSemanticValue.isConstEval = 1;
+                        }
+                        typeConvertNode->semantic_value.exprSemanticValue.kind = UNARY_OPERATION;
+                        typeConvertNode->semantic_value.exprSemanticValue.op.unaryOp = TYPE_CONVERSION;
+                        typeConvertNode->semantic_value.exprSemanticValue.srcType = exprNode->dataType;
+                        typeConvertNode->semantic_value.exprSemanticValue.targetType = attribute->attr.typeDescriptor->properties.dataType;
+                        typeConvertNode->dataType = attribute->attr.typeDescriptor->properties.dataType;
+                        typeConvertNode->linenumber = traverseIDList->linenumber;
+                        typeConvertNode->child = exprNode;
+                        typeConvertNode->parent = exprNode->parent;
+                        typeConvertNode->rightSibling = exprNode->rightSibling;
+                        typeConvertNode->leftmostSibling = exprNode->leftmostSibling;
+                        exprNode->parent = typeConvertNode;
+                        exprNode->rightSibling = NULL;
+                        exprNode->leftmostSibling = exprNode;
+                        traverseIDList->child = typeConvertNode;
+                        if(typeConvertNode->semantic_value.exprSemanticValue.isConstEval)
+                        {
+                            if(typeConvertNode->dataType == FLOAT_TYPE)
+                            {
+                                getExprOrConstValue(exprNode, NULL, &typeConvertNode->semantic_value.exprSemanticValue.constEvalValue.fValue);
+                            }
+                            else
+                            {
+                                getExprOrConstValue(exprNode, &typeConvertNode->semantic_value.exprSemanticValue.constEvalValue.iValue, NULL);
+                            }
+                        }
+                    }
                 }
                 break;
             default:
@@ -459,7 +510,43 @@ void checkAssignmentStmt(AST_NODE* assignmentNode)
     }
     else
     {
-        assignmentNode->dataType = getBiggerType(leftOp->dataType, rightOp->dataType);
+        // Check two types can be converted
+        if (getBiggerType(leftOp->dataType, rightOp->dataType) != ERROR_TYPE) {
+            assignmentNode->dataType = leftOp->dataType;
+            if(leftOp->dataType != rightOp->dataType)
+            {
+                AST_NODE *typeConvertNode = Allocate(EXPR_NODE);
+                if(rightOp->nodeType == CONST_VALUE_NODE || (rightOp->nodeType == EXPR_NODE && rightOp->semantic_value.exprSemanticValue.isConstEval))
+                {
+                    typeConvertNode->semantic_value.exprSemanticValue.isConstEval = 1;
+                }
+                typeConvertNode->semantic_value.exprSemanticValue.kind = UNARY_OPERATION;
+                typeConvertNode->semantic_value.exprSemanticValue.op.unaryOp = TYPE_CONVERSION;
+                typeConvertNode->semantic_value.exprSemanticValue.srcType = rightOp->dataType;
+                typeConvertNode->semantic_value.exprSemanticValue.targetType = assignmentNode->dataType;
+                typeConvertNode->dataType = assignmentNode->dataType;
+                typeConvertNode->child = rightOp;
+                typeConvertNode->parent = assignmentNode;
+                typeConvertNode->leftmostSibling = leftOp;
+                rightOp->parent = typeConvertNode;
+                rightOp->leftmostSibling = rightOp;
+                leftOp->rightSibling = typeConvertNode;
+                if(typeConvertNode->semantic_value.exprSemanticValue.isConstEval)
+                {
+                    if(typeConvertNode->dataType == FLOAT_TYPE)
+                    {
+                        getExprOrConstValue(rightOp, NULL, &typeConvertNode->semantic_value.exprSemanticValue.constEvalValue.fValue);
+                    }
+                    else
+                    {
+                        getExprOrConstValue(rightOp, &typeConvertNode->semantic_value.exprSemanticValue.constEvalValue.iValue, NULL);
+                    }
+                }
+            }
+        }
+        else {
+            assignmentNode->dataType = ERROR_TYPE;
+        }
     }
 }
 
@@ -624,6 +711,62 @@ void checkParameterPassing(Parameter* formalParameter, AST_NODE* actualParameter
         printErrorMsg(actualParameter, PARAMETER_TYPE_UNMATCH);
         actualParameter->dataType = ERROR_TYPE;
     }
+    else if(formalParameter->type->kind == SCALAR_TYPE_DESCRIPTOR
+            && actualParameter->dataType != formalParameter->type->properties.dataType)
+    {
+        AST_NODE *typeConvertNode = Allocate(EXPR_NODE);
+        if(actualParameter->nodeType == CONST_VALUE_NODE || (actualParameter->nodeType == EXPR_NODE && actualParameter->semantic_value.exprSemanticValue.isConstEval))
+        {
+            typeConvertNode->semantic_value.exprSemanticValue.isConstEval = 1;
+        }
+        typeConvertNode->semantic_value.exprSemanticValue.kind = UNARY_OPERATION;
+        typeConvertNode->semantic_value.exprSemanticValue.op.unaryOp = TYPE_CONVERSION;
+        typeConvertNode->semantic_value.exprSemanticValue.srcType = actualParameter->dataType;
+        typeConvertNode->semantic_value.exprSemanticValue.targetType = formalParameter->type->properties.dataType;
+        typeConvertNode->dataType = formalParameter->type->properties.dataType;
+        typeConvertNode->child = actualParameter;
+        typeConvertNode->parent = actualParameter->parent;
+        typeConvertNode->rightSibling = actualParameter->rightSibling;
+        if(actualParameter->leftmostSibling == actualParameter)
+        {
+            actualParameter->parent->child = typeConvertNode;
+            AST_NODE *tmp = actualParameter;
+            while(tmp)
+            {
+                tmp->leftmostSibling = typeConvertNode;
+                tmp = tmp->rightSibling;
+            }
+            typeConvertNode->leftmostSibling = typeConvertNode;
+        }
+        else
+        {
+            typeConvertNode->leftmostSibling = actualParameter->leftmostSibling;
+            AST_NODE *tmp = actualParameter->leftmostSibling;
+            while(tmp)
+            {
+                if(tmp->rightSibling == actualParameter)
+                {
+                    tmp->rightSibling = typeConvertNode;
+                    break;
+                }
+                tmp = tmp->rightSibling;
+            }
+        }
+        actualParameter->parent = typeConvertNode;
+        actualParameter->rightSibling = NULL;
+        actualParameter->leftmostSibling = actualParameter;
+        if(typeConvertNode->semantic_value.exprSemanticValue.isConstEval)
+        {
+            if(formalParameter->type->properties.dataType == FLOAT_TYPE)
+            {
+                getExprOrConstValue(actualParameter, NULL, &typeConvertNode->semantic_value.exprSemanticValue.constEvalValue.fValue);
+            }
+            else
+            {
+                getExprOrConstValue(actualParameter, &typeConvertNode->semantic_value.exprSemanticValue.constEvalValue.iValue, NULL);
+            }
+        }
+    }
 
 }
 
@@ -669,7 +812,14 @@ void getExprOrConstValue(AST_NODE* exprOrConstNode, int* iValue, float* fValue)
         }
         else if (exprOrConstNode->dataType == FLOAT_TYPE)
         {
-            *fValue = exprOrConstNode->semantic_value.exprSemanticValue.constEvalValue.fValue;
+            if(fValue)
+            {
+                *fValue = exprOrConstNode->semantic_value.exprSemanticValue.constEvalValue.fValue;
+            }
+            else
+            {
+                *iValue = exprOrConstNode->semantic_value.exprSemanticValue.constEvalValue.fValue;
+            }
         }
         else
         {
@@ -691,7 +841,14 @@ void getExprOrConstValue(AST_NODE* exprOrConstNode, int* iValue, float* fValue)
         }
         else if (exprOrConstNode->dataType == FLOAT_TYPE)
         {
-            *fValue = exprOrConstNode->semantic_value.exprSemanticValue.constEvalValue.fValue;
+            if(fValue)
+            {
+                *fValue = exprOrConstNode->semantic_value.exprSemanticValue.constEvalValue.fValue;
+            }
+            else
+            {
+                *iValue = exprOrConstNode->semantic_value.exprSemanticValue.constEvalValue.fValue;
+            }
         }
         else
         {
@@ -815,6 +972,13 @@ void evaluateExprValue(AST_NODE* exprNode)
         {
             printf("Only int and float can be evaluated");
         }
+
+        if(exprNode->semantic_value.exprSemanticValue.isConstEval)
+        {
+            free(leftOp);
+            free(rightOp);
+            exprNode->child = NULL;
+        }
     }
     else
     {
@@ -865,6 +1029,8 @@ void evaluateExprValue(AST_NODE* exprNode)
         {
             printf("Only int and float can be evaluated");
         }
+        free(operand);
+        exprNode->child = NULL;
     }
 }
 
@@ -895,6 +1061,69 @@ void processExprNode(AST_NODE* exprNode)
         else
         {
             exprNode->dataType = getBiggerType(leftOp->dataType, rightOp->dataType);
+            if(exprNode->dataType != leftOp->dataType)
+            {
+                AST_NODE *typeConvertNode = Allocate(EXPR_NODE);
+                if(leftOp->nodeType == CONST_VALUE_NODE || (leftOp->nodeType == EXPR_NODE && leftOp->semantic_value.exprSemanticValue.isConstEval))
+                {
+                    typeConvertNode->semantic_value.exprSemanticValue.isConstEval = 1;
+                }
+                typeConvertNode->semantic_value.exprSemanticValue.kind = UNARY_OPERATION;
+                typeConvertNode->semantic_value.exprSemanticValue.op.unaryOp = TYPE_CONVERSION;
+                typeConvertNode->semantic_value.exprSemanticValue.srcType = leftOp->dataType;
+                typeConvertNode->semantic_value.exprSemanticValue.targetType = exprNode->dataType;
+                typeConvertNode->dataType = exprNode->dataType;
+                typeConvertNode->child = leftOp;
+                typeConvertNode->parent = exprNode;
+                typeConvertNode->rightSibling = rightOp;
+                leftOp->parent = typeConvertNode;
+                leftOp->rightSibling = NULL;
+                exprNode->child = typeConvertNode;
+                rightOp->leftmostSibling = typeConvertNode;
+                if(typeConvertNode->semantic_value.exprSemanticValue.isConstEval)
+                {
+                    if(exprNode->dataType == FLOAT_TYPE)
+                    {
+                        getExprOrConstValue(leftOp, NULL, &typeConvertNode->semantic_value.exprSemanticValue.constEvalValue.fValue);
+                    }
+                    else
+                    {
+                        getExprOrConstValue(leftOp, &typeConvertNode->semantic_value.exprSemanticValue.constEvalValue.iValue, NULL);
+                    }
+                }
+            }
+            if(exprNode->dataType != rightOp->dataType)
+            {
+                AST_NODE *typeConvertNode = Allocate(EXPR_NODE);
+                if(rightOp->nodeType == CONST_VALUE_NODE || (rightOp->nodeType == EXPR_NODE && rightOp->semantic_value.exprSemanticValue.isConstEval))
+                {
+                    typeConvertNode->semantic_value.exprSemanticValue.isConstEval = 1;
+                }
+                typeConvertNode->semantic_value.exprSemanticValue.kind = UNARY_OPERATION;
+                typeConvertNode->semantic_value.exprSemanticValue.op.unaryOp = TYPE_CONVERSION;
+                typeConvertNode->semantic_value.exprSemanticValue.srcType = rightOp->dataType;
+                typeConvertNode->semantic_value.exprSemanticValue.targetType = exprNode->dataType;
+                typeConvertNode->dataType = exprNode->dataType;
+                typeConvertNode->child = rightOp;
+                typeConvertNode->parent = exprNode;
+                typeConvertNode->leftmostSibling = rightOp->leftmostSibling;
+                typeConvertNode->rightSibling = rightOp->rightSibling;
+                rightOp->parent = typeConvertNode;
+                rightOp->leftmostSibling = rightOp;
+                rightOp->rightSibling = NULL;
+                leftOp->rightSibling = typeConvertNode;
+                if(typeConvertNode->semantic_value.exprSemanticValue.isConstEval)
+                {
+                    if(exprNode->dataType == FLOAT_TYPE)
+                    {
+                        getExprOrConstValue(rightOp, NULL, &typeConvertNode->semantic_value.exprSemanticValue.constEvalValue.fValue);
+                    }
+                    else
+                    {
+                        getExprOrConstValue(rightOp, &typeConvertNode->semantic_value.exprSemanticValue.constEvalValue.iValue, NULL);
+                    }
+                }
+            }
         }
 
         if((exprNode->dataType != ERROR_TYPE) &&
@@ -922,7 +1151,6 @@ void processExprNode(AST_NODE* exprNode)
         {
             exprNode->dataType = operand->dataType;
         }
-
         if((exprNode->dataType != ERROR_TYPE) &&
            (operand->nodeType == CONST_VALUE_NODE || (operand->nodeType == EXPR_NODE && operand->semantic_value.exprSemanticValue.isConstEval)))
         {
@@ -1016,6 +1244,7 @@ void processVariableRValue(AST_NODE* idNode)
     SymbolTableEntry *symbolTableEntry = retrieveSymbol(idNode->semantic_value.identifierSemanticValue.identifierName);
 
     idNode->semantic_value.identifierSemanticValue.symbolTableEntry = symbolTableEntry;
+
     if(!symbolTableEntry)
     {
         printErrorMsg(idNode, SYMBOL_UNDECLARED);
@@ -1160,8 +1389,37 @@ void checkReturnStmt(AST_NODE* returnNode)
         processExprRelatedNode(returnNode->child);
         if(returnType != returnNode->child->dataType)
         {
-            if (!((returnType == FLOAT_TYPE && returnNode->child->dataType == INT_TYPE) || (returnType == INT_TYPE && returnNode->child->dataType == FLOAT_TYPE))) {
+            if (getBiggerType(returnType, returnNode->child->dataType) == ERROR_TYPE) {
                 errorOccur = 1;
+            }
+            else
+            {
+                AST_NODE *typeConvertNode = Allocate(EXPR_NODE);
+                AST_NODE *exprNode = returnNode->child;
+                if(exprNode->nodeType == CONST_VALUE_NODE || (exprNode->nodeType == EXPR_NODE && exprNode->semantic_value.exprSemanticValue.isConstEval))
+                {
+                    typeConvertNode->semantic_value.exprSemanticValue.isConstEval = 1;
+                }
+                typeConvertNode->semantic_value.exprSemanticValue.kind = UNARY_OPERATION;
+                typeConvertNode->semantic_value.exprSemanticValue.op.unaryOp = TYPE_CONVERSION;
+                typeConvertNode->semantic_value.exprSemanticValue.srcType = exprNode->dataType;
+                typeConvertNode->semantic_value.exprSemanticValue.targetType = returnType;
+                typeConvertNode->dataType = returnType;
+                typeConvertNode->child = exprNode;
+                typeConvertNode->parent = returnNode;
+                exprNode->parent = typeConvertNode;
+                returnNode->child = typeConvertNode;
+                if(typeConvertNode->semantic_value.exprSemanticValue.isConstEval)
+                {
+                    if(returnType == FLOAT_TYPE)
+                    {
+                        getExprOrConstValue(exprNode, NULL, &typeConvertNode->semantic_value.exprSemanticValue.constEvalValue.fValue);
+                    }
+                    else
+                    {
+                        getExprOrConstValue(exprNode, &typeConvertNode->semantic_value.exprSemanticValue.constEvalValue.iValue, NULL);
+                    }
+                }
             }
         }
     }
@@ -1372,7 +1630,8 @@ void declareFunction(AST_NODE* declarationNode)
     int enterFunctionNameToSymbolTable = 0;
     if(!errorOccur)
     {
-        enterSymbol(functionNameID->semantic_value.identifierSemanticValue.identifierName, attribute);
+        functionNameID->semantic_value.identifierSemanticValue.symbolTableEntry
+            = enterSymbol(functionNameID->semantic_value.identifierSemanticValue.identifierName, attribute);
         enterFunctionNameToSymbolTable = 1;
     }
 
@@ -1446,6 +1705,10 @@ void declareFunction(AST_NODE* declarationNode)
         while(traverseListNode)
         {
             processGeneralNode(traverseListNode);
+            if(traverseListNode->dataType == ERROR_TYPE)
+            {
+                errorOccur = 1;
+            }
             traverseListNode = traverseListNode->rightSibling;
         }
     }

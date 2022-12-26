@@ -14,5 +14,7 @@ AST_NODE *Allocate(AST_TYPE type){
     // Notice that leftmostSibling is not initialized as NULL
     temp->leftmostSibling = temp;
     temp->linenumber = linenumber;
+    temp->nIntRegs = 0;
+    temp->nFloatRegs = 0;
     return temp;
 }

@@ -24,6 +24,8 @@ SymbolTableEntry* newSymbolTableEntry(int nestingLevel)
     symbolTableEntry->sameNameInOuterLevel = NULL;
     symbolTableEntry->attribute = NULL;
     symbolTableEntry->name = NULL;
+    symbolTableEntry->offset = 0;
+    symbolTableEntry->isGlobal = 0;
     symbolTableEntry->nestingLevel = nestingLevel;
     return symbolTableEntry;
 }
@@ -225,7 +227,7 @@ void removeSymbol(char* symbolName)
             {
                 symbolTable.scopeDisplay[symbolTable.currentLevel] = scopeChain->nextInSameLevel;
             }
-            free(scopeChain);
+            // free(scopeChain);
             break;
         }
         else

@@ -57,6 +57,7 @@ typedef struct FunctionSignature
     int parametersCount;
     Parameter* parameterList;
     DATA_TYPE returnType;
+    int frameSize;
 } FunctionSignature;
 
 typedef struct SymbolAttribute
@@ -79,6 +80,8 @@ typedef struct SymbolTableEntry
 
     char* name;
     SymbolAttribute* attribute;
+    int offset; // for local variable, address = fp - offset
+    int isGlobal;
     int nestingLevel;
 
 } SymbolTableEntry;

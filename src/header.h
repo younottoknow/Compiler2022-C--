@@ -42,7 +42,8 @@ typedef enum UNARY_OPERATOR
 {
     UNARY_OP_POSITIVE,
     UNARY_OP_NEGATIVE,
-    UNARY_OP_LOGICAL_NEGATION
+    UNARY_OP_LOGICAL_NEGATION,
+    TYPE_CONVERSION
 } UNARY_OPERATOR;
 
 //C_type= type of constant ex: 1, 3.3, "const string"
@@ -114,12 +115,16 @@ typedef struct EXPRSemanticValue
         BINARY_OPERATOR binaryOp;
         UNARY_OPERATOR unaryOp;
     } op;
+
+    DATA_TYPE srcType;
+    DATA_TYPE targetType;
 } EXPRSemanticValue;
 
 typedef struct DECLSemanticValue
 {
     DECL_KIND kind;
 } DECLSemanticValue;
+
 
 typedef struct IdentifierSemanticValue
 {
@@ -159,10 +164,13 @@ struct AST_NODE {
         EXPRSemanticValue exprSemanticValue;
         CON_Type *const1;
     } semantic_value;
+    int nIntRegs;
+    int nFloatRegs;
 };
 typedef struct AST_NODE AST_NODE;
 
 AST_NODE *Allocate(AST_TYPE type);
 void semanticAnalysis(AST_NODE *root);
-
+void preprocess(AST_NODE *root);
+void genCode(AST_NODE *root, char *filename);
 #endif

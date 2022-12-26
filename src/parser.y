@@ -321,7 +321,7 @@ var_decl	: type init_id_list MK_SEMICOLON
                     $$ = makeDeclNode(VARIABLE_DECL);
                     makeFamily($$, 2, $1, $2);
                 }
-            | ID id_list MK_SEMICOLON
+            | ID init_id_list MK_SEMICOLON
                 {
                     $$ = makeDeclNode(VARIABLE_DECL);
                     makeFamily($$, 2, makeIDNode($1, NORMAL_ID), $2);
@@ -806,6 +806,8 @@ char *argv[];
     initializeSymbolTable();
 
     semanticAnalysis(prog);
+
+    if(prog->dataType != ERROR_TYPE) genCode(prog, NULL);
 
     symbolTableEnd();
     if (!g_anyErrorOccur) {
