@@ -1,5 +1,6 @@
 TARGET = parser
-OBJECT = parser.tab.c parser.tab.o lex.yy.c alloc.o functions.o semanticAnalysis.o symbolTable.o genCode.o preprocess.o
+
+OBJECT = parser.tab.c parser.tab.o lex.yy.c alloc.o functions.o semanticAnalysis.o symbolTable.o genCode.o preprocess.o trim.o
 OUTPUT = parser.output parser.tab.h
 CC = gcc -g -Wall
 LEX = flex
@@ -7,8 +8,8 @@ YACC = bison -v
 YACCFLAG = -d
 LIBS = -lfl
 
-parser: parser.tab.o alloc.o functions.o symbolTable.o semanticAnalysis.o genCode.o preprocess.o
-	$(CC) -o $(TARGET) parser.tab.o alloc.o functions.o symbolTable.o semanticAnalysis.o genCode.o preprocess.o $(LIBS)
+parser: parser.tab.o alloc.o functions.o symbolTable.o semanticAnalysis.o genCode.o preprocess.o trim.o
+	$(CC) -o $(TARGET) parser.tab.o alloc.o functions.o symbolTable.o semanticAnalysis.o genCode.o preprocess.o trim.o $(LIBS)
 
 parser.tab.o: parser.tab.c lex.yy.c alloc.o functions.c symbolTable.o semanticAnalysis.o
 	$(CC) -c parser.tab.c
@@ -36,6 +37,9 @@ preprocess.o: preprocess.c header.h symbolTable.h
 
 genCode.o: genCode.c genCode.h header.h symbolTable.h
 	$(CC) -c genCode.c
+
+trim.o: trim.c header.h symbolTable.h
+	$(CC) -c trim.c
 
 clean:
 	rm -f $(TARGET) $(OBJECT) $(OUTPUT)

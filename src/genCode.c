@@ -862,6 +862,7 @@ void genConst(AST_NODE *constValueNode)
         fprintf(stderr, "Unknown constant type\n");
     }
 }
+
 void genExprRelatedNode(AST_NODE* exprRelatedNode)
 {
     switch(exprRelatedNode->nodeType)
@@ -1361,6 +1362,7 @@ void genCode(AST_NODE *root, char *filename)
         printf("Cannot open file \"%s\"\n", filename);
         return;
     }
+    trimProgram(root);
     preprocess(root);
     initRegs();
     genProgram(root);

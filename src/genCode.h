@@ -21,10 +21,16 @@ typedef struct RegFrame{
     struct RegFrame *next;
 } RegFrame;
 
+int findReg(DATA_TYPE type);
+void saveRegs(int nIntRegs, int nFloatRegs);
+void restoreRegs();
+int findPlace(AST_NODE *node);
 void initRegs();
 void genExprNode(AST_NODE *exprNode);
 void genFunctionCall(AST_NODE* functionCallNode);
-void genVariable(AST_NODE* idNode);
+void genVariableR(AST_NODE* idNode);
+void genVariableL(AST_NODE *idNode);
+void genConst(AST_NODE *constValueNode);
 void genExprRelatedNode(AST_NODE* exprRelatedNode);
 void genVarDeclNode(AST_NODE *varDeclNode);
 void genVarListNode(AST_NODE *varListNode);

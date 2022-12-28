@@ -166,6 +166,8 @@ struct AST_NODE {
     } semantic_value;
     int nIntRegs;
     int nFloatRegs;
+    int terminateNormal;
+    int containFunctionCall;
 };
 typedef struct AST_NODE AST_NODE;
 
@@ -173,4 +175,5 @@ AST_NODE *Allocate(AST_TYPE type);
 void semanticAnalysis(AST_NODE *root);
 void preprocess(AST_NODE *root);
 void genCode(AST_NODE *root, char *filename);
+void trimProgram(AST_NODE *root);
 #endif
